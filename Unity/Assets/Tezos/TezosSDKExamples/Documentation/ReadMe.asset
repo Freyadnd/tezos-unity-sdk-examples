@@ -35,14 +35,59 @@ MonoBehaviour:
     PingObjectGuid: 791e64f89d8236f4ab4fb4fddf9b4204
     MenuItemName: 
     MenuItemPath: 
-  - TextHeading: 
-    TextSubheading: 
+  - TextHeading:
+    TextSubheading:
     TextBody: User checks ownership of a given NFT. In production, this may unlock
       related game features.
-    LinkName: 
-    LinkUrl: 
+    LinkName:
+    LinkUrl:
     PingObjectName: Example02_NFTTokenGating
     PingObjectGuid: af38c5d306baabc46865c0fecd53c044
-    MenuItemName: 
-    MenuItemPath: 
+    MenuItemName:
+    MenuItemPath:
+  - TextHeading: Architecture
+    TextSubheading: Full Stack Overview
+    TextBody: 'A Tezos-integrated Unity game spans five layers: (1) Unity Game - your
+      C# scripts call ITezosAPI via TezosSingleton.Instance. (2) Tezos Unity SDK -
+      manages wallet sessions and surfaces C# events via ITezosAPI.MessageReceiver.
+      (3) Beacon Wallet - the player''s mobile wallet app signs operations; private
+      keys never leave the device. (4) Tezos RPC / TzKT Indexer - RPC nodes broadcast
+      signed transactions; TzKT provides a fast REST API for querying token ownership.
+      (5) Smart Contracts - FA2 contracts store NFT ownership records on-chain.'
+    LinkName: TzKT API Reference
+    LinkUrl: https://api.tzkt.io
+    PingObjectName:
+    PingObjectGuid:
+    MenuItemName:
+    MenuItemPath:
+  - TextHeading: Wallet Authentication
+    TextSubheading: How It Works
+    TextBody: 'Authentication uses the Beacon open standard - no password or API key
+      is involved. Flow: (1) Call tezos.ConnectWallet(). (2) The SDK generates a Beacon
+      pairing request. (3) On desktop a QR code is shown; on mobile a deep link opens
+      the wallet app. (4) The player approves the connection in their wallet. (5) The
+      SDK fires MessageReceiver.AccountConnected with the player''s tz1... address.
+      (6) Your game receives the address and updates its state. The address is a public
+      identifier - no private key ever touches your game code.'
+    LinkName: Beacon Protocol Docs
+    LinkUrl: https://docs.walletbeacon.io
+    PingObjectName: Example01_Authentication
+    PingObjectGuid: 791e64f89d8236f4ab4fb4fddf9b4204
+    MenuItemName:
+    MenuItemPath:
+  - TextHeading: NFT Verification
+    TextSubheading: How It Works
+    TextBody: 'NFT ownership lives in FA2 smart contracts on-chain, not in the SDK
+      or your game. Flow: (1) Player connects their wallet. (2) Call tezos.IsOwnerOfToken(address,
+      contract, tokenId). (3) TezosExtensions.cs sends a GET request to the TzKT API.
+      (4) TzKT returns matching balance records from the FA2 contract ledger. (5) A
+      non-empty result means the player holds the token - unlock the feature. TzKT
+      is used instead of direct RPC because it pre-indexes FA2 ledgers as a simple
+      REST API, avoiding the need to parse raw Michelson contract storage.'
+    LinkName:
+    LinkUrl:
+    PingObjectName: Example02_NFTTokenGating
+    PingObjectGuid: af38c5d306baabc46865c0fecd53c044
+    MenuItemName:
+    MenuItemPath:
   HasLoadedLayout: 0

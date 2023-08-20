@@ -122,6 +122,123 @@ The SDK handles the Beacon handshake and wallet session. Your game code only see
 
 ---
 
+## Tezos SDK Architecture in a Unity Game
+
+This section explains the full stack behind a Tezos-integrated Unity game — from the C# code in your scene down to the smart contracts on-chain.
+
+### System Diagram
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Unity Game                        │
+│                                                      │
+│  Your C# scripts call ITezosAPI via                  │
+│  TezosSingleton.Instance                             │
+└──────────────────────┬──────────────────────────────┘
+                       │ SDK calls (ConnectWallet,
+                       │ GetActiveWalletAddress, etc.)
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│               Tezos Unity SDK                        │
+│                                                      │
+│  Manages wallet sessions, signs requests,            │
+│  surfaces C# events via ITezosAPI.MessageReceiver    │
+└──────────────────────┬──────────────────────────────┘
+                       │ Beacon protocol
+                       │ (QR code on desktop,
+                       │  deep link on mobile)
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│              Beacon Wallet                           │
+│                                                      │
+│  Player's mobile wallet app (e.g. Temple, Kukai).   │
+│  Holds the private key. Signs operations and        │
+│  permission requests — keys never leave the device. │
+└──────────────┬──────────────────────┬───────────────┘
+               │ Signed operations    │ Read queries
+               ▼                      ▼
+┌──────────────────────┐  ┌──────────────────────────┐
+│   Tezos RPC Node     │  │    TzKT Indexer API       │
+│                      │  │                           │
+│  Broadcasts signed   │  │  Fast, queryable index    │
+│  transactions to     │  │  of on-chain state.       │
+│  the network.        │  │  Used for token balance   │
+│                      │  │  and ownership lookups.   │
+└──────────┬───────────┘  └───────────────────────────┘
+           │ Confirmed transactions
+           ▼
+┌─────────────────────────────────────────────────────┐
+│               Smart Contracts                        │
+│                                                      │
+│  FA2 token contracts store NFT ownership records.   │
+│  Custom game contracts can store on-chain state     │
+│  (scores, inventories, achievements).               │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+### How Wallet Authentication Works
+
+Authentication uses the [Beacon](https://docs.walletbeacon.io) open standard for connecting dApps to Tezos wallets. No password or API key is involved — the wallet signs a challenge to prove ownership of an address.
+
+**Flow:**
+
+1. Your game calls `tezos.ConnectWallet()`
+2. The SDK generates a Beacon pairing request
+3. **Desktop:** A QR code is shown — the player scans it with their wallet app
+   **Mobile:** A deep link opens the wallet app directly
+4. The player approves the connection in their wallet
+5. The SDK fires `MessageReceiver.AccountConnected` with the player's `tz1...` address
+6. Your game receives the address and updates its state
+
+```
+Game                SDK              Wallet App         Tezos Network
+ │                   │                   │                   │
+ │ ConnectWallet()   │                   │                   │
+ │──────────────────>│                   │                   │
+ │                   │── Beacon pair ───>│                   │
+ │                   │                  │── player approves  │
+ │                   │<─ tz1... address ─│                   │
+ │<─ AccountConnected│                   │                   │
+ │   (tz1... address)│                   │                   │
+```
+
+The address is a public identifier — no private key ever touches your game code.
+
+---
+
+### How NFT Verification Works
+
+NFT ownership is not stored in the SDK or your game — it lives in FA2 smart contracts on-chain. To verify ownership, the game queries the TzKT indexer, which provides a fast HTTP API over indexed blockchain state.
+
+**Flow:**
+
+1. Player connects their wallet (authentication, see above)
+2. Game calls `tezos.IsOwnerOfToken(walletAddress, contractAddress, tokenId)`
+3. `TezosExtensions.cs` sends a `GET` request to `https://api.tzkt.io/v1/tokens/balances`
+4. TzKT returns matching balance records from the FA2 contract's ledger
+5. A non-empty result means the player holds the token → feature unlocked
+
+```
+Game                  TezosExtensions       TzKT API            FA2 Contract
+ │                          │                   │                     │
+ │ IsOwnerOfToken(          │                   │                     │
+ │   address,              │                   │          (indexed   │
+ │   contract,             │                   │           from here)│
+ │   tokenId)              │                   │<────────────────────│
+ │────────────────────────>│                   │                     │
+ │                         │── GET /tokens/    │                     │
+ │                         │   balances?...   >│                     │
+ │                         │<── [ {balance} ] ─│                     │
+ │<── true / false ────────│                   │                     │
+```
+
+**Why TzKT instead of direct RPC?**
+Tezos RPC nodes expose raw contract storage, which requires unpacking Michelson data. TzKT pre-indexes FA2 ledgers and exposes them as a simple REST API — no Michelson parsing needed.
+
+---
+
 ## Getting Started
 
 1. Clone or download this repo
