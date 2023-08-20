@@ -1,36 +1,164 @@
-
-
-
 # Tezos SDK For Unity - Examples
 
-This **Unity Project** demonstrates key features of the "Tezos SDK For Unity". It contains one isolated Unity Scene for each feature.
+A Unity project demonstrating how to integrate Tezos blockchain features into games using the [Tezos SDK For Unity](https://github.com/trilitech/tezos-unity-sdk). Each example is an isolated scene focused on a single integration pattern.
 
-### Getting Started
-1. Download this repo (*.zip or *.git)
-1. Download the [Unity Editor](https://store.unity.com/#plans-individual)
-1. Open this repo in the Unity Editor
-1. Enjoy!
+---
 
-### Documentation
-* <a href="https://opentezos.com/gaming/unity-sdk">Web Documentation</a> - **Overview** of the "Tezos SDK For Unity"
+## Project Overview
 
+This repo is a practical reference for Unity developers adding Tezos blockchain functionality to a game. It covers the two most common integration patterns: authenticating a player via their Tezos wallet, and gating game features behind NFT ownership.
 
-### Configuration
-* **Unity Project** - <a href="./Unity/">./Unity/</a>
-* **Unity Version** - [Version](./Unity/ProjectSettings/ProjectVersion.txt)
-* **Unity Target** - [Standalone MAC/PC](https://support.unity.com/hc/en-us/articles/206336795-What-platforms-are-supported-by-Unity-)
-* **Unity Menus** - See `Unity → Window → Tezos → Tezos SDK For Unity → Open ReadMe` for additional orientation
-* **Unity Dependencies** - The [Unity Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) resolves all project dependencies from the [Manifest.json](./Unity/Packages/manifest.json) including the <a href="https://github.com/trilitech/tezos-unity-sdk">Tezos SDK For Unity</a>. No further action is required
+It is not a full game — it is a focused collection of runnable examples with annotated source code you can copy into your own project.
 
+---
 
-### Videos
+## Features Demonstrated
 
-This **Unity Project** is featured in the following videos.
+| Feature | Scene | API Used |
+|---|---|---|
+| Wallet connect / disconnect | `Example01_Authentication` | `ITezosAPI.ConnectWallet()` |
+| Check authentication state | `Example01_Authentication` | `ITezosAPI.GetActiveWalletAddress()` |
+| NFT ownership check (token gating) | `Example02_NFTTokenGating` | `ITezosAPI.IsOwnerOfToken()` |
+| List all NFTs for an account | `Example02_NFTTokenGating` | `ITezosAPI.GetAllTokensForOwner()` |
+
+---
+
+## Example Scenes
+
+### Example 01 — Authentication
+
+**Scene:** `Example01_Authentication`
+**Script:** [`Example01_Authentication.cs`](./Unity/Assets/Tezos/TezosSDKExamples/Scripts/Runtime/Tezos/TezosSDKExamples/Scenes/Example01_Authentication.cs)
+
+Demonstrates connecting a player to the Tezos network via a Tezos-compatible mobile wallet (Beacon protocol). On desktop, a QR code is displayed; on mobile, a deep link opens the wallet app directly.
+
+```csharp
+ITezosAPI tezos = TezosSingleton.Instance;
+
+// Subscribe to wallet events
+tezos.MessageReceiver.AccountConnected += OnAccountConnected;
+tezos.MessageReceiver.AccountDisconnected += OnAccountDisconnected;
+
+// Initiate wallet connection (shows QR code on desktop, deep link on mobile)
+if (!tezos.HasActiveWalletAddress())
+{
+    tezos.ConnectWallet();
+}
+```
+
+---
+
+### Example 02 — NFT Token Gating
+
+**Scene:** `Example02_NFTTokenGating`
+**Script:** [`Example02_NFTTokenGating.cs`](./Unity/Assets/Tezos/TezosSDKExamples/Scripts/Runtime/Tezos/TezosSDKExamples/Scenes/Example02_NFTTokenGating.cs)
+
+Demonstrates querying the Tezos blockchain to check whether a player owns a specific NFT, and listing all NFTs held by an account. Use this pattern to unlock game features, characters, or content based on wallet holdings.
+
+```csharp
+ITezosAPI tezos = TezosSingleton.Instance;
+
+string walletAddress = tezos.GetActiveWalletAddress();
+string nftContract   = "KT1BRADdqGk2eLmMqvyWzqVmPQ1RCBCbW5dY";
+int    tokenId       = 1;
+
+// Returns true if the wallet owns the token
+bool hasNft = await tezos.IsOwnerOfToken(walletAddress, nftContract, tokenId);
+
+if (hasNft)
+{
+    // Unlock game feature, character, level, etc.
+}
+
+// List every token held by an account
+List<TokenBalance> tokens = await tezos.GetAllTokensForOwner(walletAddress);
+```
+
+---
+
+## Architecture Overview
+
+The project follows a three-layer structure. Each example scene has its own view, controller, and scene script — keeping Tezos calls isolated from UI logic.
+
+```
+Scripts/Runtime/
+├── Scenes/
+│   ├── Example01_Authentication.cs     ← Tezos calls live here
+│   └── Example02_NFTTokenGating.cs     ← Tezos calls live here
+├── Shared/
+│   ├── Controllers/                    ← Base controller classes (UI refresh, event wiring)
+│   ├── View/                           ← UI component wrappers
+│   └── Tezos/
+│       ├── TezosExtensions.cs          ← Extension methods over ITezosAPI
+│       └── AuthenticationQr.cs         ← QR code / deep link UI component
+```
+
+**Key design decisions:**
+- `TezosSingleton.Instance` provides a single entry point to the SDK — treat it like a service locator.
+- All blockchain calls are `async/await` using [UniTask](https://github.com/Cysharp/UniTask). Never call them on the main thread without `await`.
+- Wallet events (`AccountConnected`, `AccountDisconnected`) are fired by `ITezosAPI.MessageReceiver` — subscribe in `Start()`, unsubscribe in `OnDestroy()`.
+- NFT ownership queries go through [`TezosExtensions.cs`](./Unity/Assets/Tezos/TezosSDKExamples/Scripts/Runtime/Tezos/TezosSDKExamples/Shared/Tezos/TezosExtensions.cs), which wraps the [TzKT public API](https://api.tzkt.io) (`https://api.tzkt.io/v1/tokens/balances`).
+
+---
+
+## How Tezos Integrates Into Unity Games
+
+```
+Unity Game
+    │
+    ├── TezosSingleton.Instance  (ITezosAPI)
+    │       │
+    │       ├── ConnectWallet()           → Beacon protocol → player's mobile wallet
+    │       ├── GetActiveWalletAddress()  → returns tz1... address
+    │       └── MessageReceiver           → C# events for wallet state changes
+    │
+    └── TezosExtensions (this project)
+            │
+            ├── IsOwnerOfToken()          → HTTP GET → TzKT API → true/false
+            └── GetAllTokensForOwner()    → HTTP GET → TzKT API → List<TokenBalance>
+```
+
+The SDK handles the Beacon handshake and wallet session. Your game code only sees `ITezosAPI` — a clean interface with no blockchain boilerplate. NFT queries bypass the SDK and hit the TzKT indexer directly via `UnityWebRequest`, since TzKT provides richer query options than the SDK's built-in methods.
+
+---
+
+## Getting Started
+
+1. Clone or download this repo
+2. Install [Unity Editor](https://store.unity.com/#plans-individual) (see [required version](./Unity/ProjectSettings/ProjectVersion.txt))
+3. Open the `./Unity/` folder in Unity Hub
+4. All dependencies resolve automatically via the [Unity Package Manager](https://docs.unity3d.com/Manual/upm-ui.html) — no manual setup required
+5. Open a scene from `Assets/Tezos/TezosSDKExamples/Scenes/` and press Play
+
+> Additional orientation: `Unity → Window → Tezos → Tezos SDK For Unity → Open ReadMe`
+
+---
+
+## Configuration
+
+| Setting | Value |
+|---|---|
+| Unity Project | [`./Unity/`](./Unity/) |
+| Unity Version | [See ProjectVersion.txt](./Unity/ProjectSettings/ProjectVersion.txt) |
+| Target Platform | Standalone Mac/PC (mobile wallet connection supported) |
+| Dependencies | Resolved automatically via [manifest.json](./Unity/Packages/manifest.json) |
+
+---
+
+## Documentation
+
+- [Tezos SDK For Unity — OpenTezos](https://opentezos.com/gaming/unity-sdk)
+- [Tezos SDK For Unity — GitHub](https://github.com/trilitech/tezos-unity-sdk)
+- [TzKT API Reference](https://api.tzkt.io)
+
+---
+
+## Videos
 
 <table>
 <tr>
 <th>Tezos SDK For Unity - Authentication</th>
-<th>Tezos SDK For Unity - NFTS</th>
+<th>Tezos SDK For Unity - NFTs</th>
 </tr>
 <tr>
 <td>
@@ -42,8 +170,9 @@ This **Unity Project** is featured in the following videos.
 </tr>
 </table>
 
+---
 
-### Screenshots
+## Screenshots
 
 <table>
 <tr>
@@ -59,59 +188,3 @@ This **Unity Project** is featured in the following videos.
 </td>
 </tr>
 </table>
-
-
-### Features
-
-This project showcases several key features and use-cases for the "Tezos SDK For Unity". Here are highlights.
-
-**Authentication**
-
-User connects to the blockchain with a Tezos-compatible mobile wallet.
-
-To see this feature in action, play the `Example01_Authentication` Scene. The <a href="./Unity/Assets/Tezos/TezosSDKExamples/Scripts/Runtime/Tezos/TezosSDKExamples/Scenes/Example01_Authentication.cs">Example01_Authentication.cs</a> class provides a full demonstration. Here is partial snippet.
-
-```csharp
-
-// Store reference for convenience
-ITezosAPI tezos = TezosSingleton.Instance;
-
-// Determines if the user is authenticated 
-if (!tezos.HasActiveWalletAddress())
-{
-    // Makes a call to connect with a wallet
-    tezos.ConnectWallet();
-}
-```
-
-**NFTs**
-
-User checks ownership of a given NFT. In production, this may unlock related game features.
-
-To see this feature in action, play the `Example02_NFTTokenGating` Scene. The <a href="./Unity/Assets/Tezos/TezosSDKExamples/Scripts/Runtime/Tezos/TezosSDKExamples/Scenes/Example02_NFTTokenGating.cs">Example02_NFTTokenGating.cs</a> class provides a full demonstration. Here is partial snippet.
-
-```csharp
-
-// Setup
-string demoNFTAddress = "KT1BRADdqGk2eLmMqvyWzqVmPQ1RCBCbW5dY";
-int demoTokenId = 1;
-            
-// Store reference for convenience
-ITezosAPI tezos = TezosSingleton.Instance;
-        
-// Returns the address of the current active wallet
-string activeWalletAddress = tezos.GetActiveWalletAddress();
-
-// Determines if the user account owns a given Nft
-bool hasTheNft = tezos.IsOwnerOfToken(
-    activeWalletAddress, 
-    demoNFTAddress, 
-    demoTokenId);
-
-if (hasTheNft)
-{
-    // Unlock special game features
-}
-```
-
-
